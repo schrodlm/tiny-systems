@@ -47,6 +47,9 @@ let rec evaluate (ctx:VariableContext) e =
           | "+" -> ValNum(n1 + n2)
           | "*" -> ValNum(n1 * n2)
           | _ -> failwith "unsupported binary operator"
+      | _ ->
+        failwith "Cannot use closure in a binary operation"
+
   | Variable(v) ->
       match ctx.TryFind v with 
       | Some res -> res
@@ -58,16 +61,25 @@ let rec evaluate (ctx:VariableContext) e =
   
   | Lambda(v, e) ->
       // TODO: Evaluate a lambda - create a closure value
-      failwith "not implemented"
+      ValClosure(v,e , ctx)
 
   | Application(e1, e2) ->
       // TODO: Evaluate a function application. Recursively
       // evaluate 'e1' and 'e2'; 'e1' must evaluate to a closure.
       // You can then evaluate the closure body.
-      failwith "not implemented"
+      let val1 = evaluate ctx e1
+      let val2 = evaluate ctx e2
+
+      match val1 with
+      | ValClosure(param, body, closureCtx) ->
+          // Create new context with the parameter bound to the argument value
+          let newCtx = closureCtx.Add(param, val2)
+          // Evaluate the body in the new context
+          evaluate newCtx body
+      | _ -> failwith "invalid application"
 
 // ----------------------------------------------------------------------------
-// Test cases
+ // Test cases
 // ----------------------------------------------------------------------------
 
 // Basic function declaration (should return closure)
