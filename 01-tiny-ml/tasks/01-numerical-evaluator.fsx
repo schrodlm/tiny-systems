@@ -6,7 +6,7 @@
 // binary operators and variables) and variable contexts)
 
 type Value = 
-  | ValNum of int 
+  | ValNum of int
 
 type Expression = 
   | Constant of int
