@@ -31,28 +31,50 @@ let rec evaluate (ctx:VariableContext) e =
       let v1 = evaluate ctx e1
       let v2 = evaluate ctx e2
       match v1, v2 with 
+      // TODO: We added 'ValClosure' to 'Value', so this can now fail to 
+      // match (if you call binary operator with functions as arguments).
+      // Add a catch-all ('_') case and throw an exception using 'failwith'
+      // Also do the same for 'Unary' an 'If'!
       | ValNum n1, ValNum n2 -> 
           match op with 
           | "+" -> ValNum(n1 + n2)
           | "*" -> ValNum(n1 * n2)
           | _ -> failwith "unsupported binary operator"
-      | _ -> failwith "invalid argument of binary operator"
+      | _ ->
+        failwith "Cannot use closure in a binary operation"
+
   | Variable(v) ->
       match ctx.TryFind v with 
       | Some res -> res
       | _ -> failwith ("unbound variable: " + v)
 
-  // NOTE: You have the following from before
+  // NOTE: You have the following two from before
   | Unary(op, e) -> failwith "implemented in step 2"
   | If(econd, etrue, efalse) -> failwith "implemented in step 2"
-  | Lambda(v, e) -> failwith "implemented in step 3"
-  | Application(e1, e2) -> failwith "implemented in step 3"
+  
+  | Lambda(v, e) ->
+      // TODO: Evaluate a lambda - create a closure value
+      ValClosure(v,e , ctx)
 
+  | Application(e1, e2) ->
+      // TODO: Evaluate a function application. Recursively
+      // evaluate 'e1' and 'e2'; 'e1' must evaluate to a closure.
+      // You can then evaluate the closure body.
+      let val1 = evaluate ctx e1
+      let val2 = evaluate ctx e2
+
+      match val1 with
+      | ValClosure(param, body, closureCtx) ->
+          // Create new context with the parameter bound to the argument value
+          let newCtx = closureCtx.Add(param, val2)
+          // Evaluate the body in the new context
+          evaluate newCtx body
+      | _ -> failwith "invalid application"
   | Let(v, e1, e2) ->
     // TODO: There are two ways to do this! A nice tricky is to 
     // treat 'let' as a syntactic sugar and transform it to the
     // 'desugared' expression and evaluating that :-)
-    failwith "not implemented"
+    evaluate ctx (Application(Lambda(v, e2), e1))
 
 // ----------------------------------------------------------------------------
 // Test cases
