@@ -56,9 +56,14 @@ let rec evaluate (ctx:VariableContext) e =
         failwith "Cannot use closure in a binary operation"
 
   | Variable(v) ->
-      match ctx.TryFind v with 
-      | Some res -> res.Value
-      | _ -> failwith ("unbound variable: " + v)
+      // printfn "looking for %s" v
+      match ctx.TryFind v with
+      | Some lazyValue -> 
+          let result = lazyValue.Value
+          // printfn "retrieved value: %A" result
+          result
+      | None -> 
+          failwith ("unbound variable: " + v)
 
   // NOTE: You have the following two from before
   | Unary(op, e) ->
@@ -86,15 +91,18 @@ let rec evaluate (ctx:VariableContext) e =
   | Application(e1, e2) ->
       // e1(e2) - it is expected that function has at max 1 argument
       //        - to eval more that one argument use currying
-      let val1 = evaluate ctx e1
-      let val2 = evaluate ctx e2
-
+      // printfn "e1: %A" e1
+      let val1: Value = evaluate ctx e1
+      let val2: Value = evaluate ctx e2
+      // printfn "whole context: %A" ctx
       match val1 with
-      | ValClosure(param, body, closureCtx) ->
+      | ValClosure(param: string, body: Expression, closureCtx: VariableContext) ->
           // Create new context with the parameter bound to the argument value
-          let newCtx = closureCtx.Add(param, Lazy(val2))
+          let newCtx: Map<string,Lazy<Value>> = closureCtx.Add(param, Lazy(val2))
+          // printfn "context of the closure: %A" closureCtx
           // Evaluate the body in the new context
-          evaluate newCtx body
+          let newMap = Map.fold (fun acc key value -> Map.add key value acc) ctx newCtx
+          evaluate newMap body
       | _ -> failwith "invalid application"
   | Let(v, e1, e2) ->
     // TODO: There are two ways to do this! A nice tricky is to 
@@ -134,7 +142,7 @@ let rec evaluate (ctx:VariableContext) e =
   | Case(b, e) ->
       // TODO: Create a union value.
       ValCase(b, (evaluate ctx e))
-  | Recursive(v, e1, e2) ->
+  | Recursive(v: string, e1: Expression, e2: Expression) ->
       // TODO: Implement recursion for 'let rec v = e1 in e2'.
       // (In reality, this will only work if 'e1' is a function
       // but the case can be implemented without assuming that).
@@ -145,10 +153,16 @@ let rec evaluate (ctx:VariableContext) e =
       //3. Call of the function with provided arguments -> application with the variable name
 
       //What I am gonna do:
-      //1. Save the name of the function as a variable and the body as the contents (can do this because lazy eval)
-      //2. 
+      //1. Save the name of the function as a variable and the body as the contents (closure) - note: can do this because lazy eval
+      let lazy_closure: Lazy<Value> = lazy evaluate ctx e1
+      let ctx_with_lazy_closure: Map<string,Lazy<Value>> = ctx.Add(v, lazy_closure)
 
-      failwith "not implemented"
+      let test = evaluate ctx_with_lazy_closure e2
+      printfn "Finished with: %A" test
+      test
+
+
+
 
 // ----------------------------------------------------------------------------
 // Test cases
