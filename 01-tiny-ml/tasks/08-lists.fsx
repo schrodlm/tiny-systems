@@ -7,8 +7,6 @@ type Value =
   | ValClosure of string * Expression * VariableContext
   | ValTuple of Value * Value
   | ValCase of bool * Value
-  // NOTE: A value that represents "empty value" and is
-  // useful as the value for representing the empty list.
   | ValUnit 
 
 and Expression = 
@@ -25,8 +23,6 @@ and Expression =
   | Case of bool * Expression
   | Match of Expression * string * Expression * Expression
   | Recursive of string * Expression * Expression
-  // NOTE: An expression that evaluates to a unit value.
-  // This exists in F# too and it is written as '()'
   | Unit 
 
 and VariableContext = 
@@ -48,25 +44,80 @@ let rec evaluate (ctx:VariableContext) e =
           | "+" -> ValNum(n1 + n2)
           | "*" -> ValNum(n1 * n2)
           | _ -> failwith "unsupported binary operator"
-      | _ -> failwith "invalid argument of binary operator"
+      | _ ->
+        failwith "Cannot use closure in a binary operation"
+
   | Variable(v) ->
-      match ctx.TryFind v with 
-      | Some res -> res.Value
-      | _ -> failwith ("unbound variable: " + v)
+      match ctx.TryFind v with
+      | Some lazyValue -> 
+          let result = lazyValue.Value
+          result
+      | None -> 
+          failwith ("unbound variable: " + v)
 
-  // NOTE: You have the following from before
-  | Unary(op, e) -> failwith "implemented in step 2"
-  | If(econd, etrue, efalse) -> failwith "implemented in step 2"
-  | Lambda(v, e) -> failwith "implemented in step 3"
-  | Application(e1, e2) -> failwith "implemented in step 3"
-  | Let(v, e1, e2) -> failwith "implemented in step 4"
-  | Tuple(e1, e2) -> failwith "implemented in step 5"
-  | TupleGet(b, e) -> failwith "implemented in step 5"
-  | Match(e, v, e1, e2) -> failwith "implemented in step 6"
-  | Case(b, e) -> failwith "implemented in step 6"
-  | Recursive(v, e1, e2) -> failwith "implemented in step 7"
+  | Unary(op, e) ->
+      match op with
+      | "-" -> 
+        let v = evaluate ctx e
+        match v with
+        | ValNum n -> ValNum(-n)
+      | _ -> failwith "not implemented"
+  | If(cond, tr: Expression, fal) -> 
+    let cond_val = evaluate ctx cond
+    match cond_val with
+    | ValNum 1 ->
+      (evaluate ctx tr)
+    | ValNum n ->
+      (evaluate ctx fal) 
+    | _ ->
+      failwith "Invalid condition"
+  
+  | Lambda(v, e) ->
+      ValClosure(v,e , ctx)
 
-  // NOTE: This is so uninteresting I did this for you :-)
+  | Application(e1, e2) ->
+      let val1: Value = evaluate ctx e1
+      let val2: Value = evaluate ctx e2
+      match val1 with
+      | ValClosure(param: string, body: Expression, closureCtx: VariableContext) ->
+          let newCtx: Map<string,Lazy<Value>> = closureCtx.Add(param, Lazy(val2))
+          evaluate newCtx body
+      | _ -> failwith "invalid application"
+  | Let(v, e1, e2) ->
+    evaluate ctx (Application(Lambda(v, e2), e1))
+
+  | Tuple(e1, e2) ->
+    let val1 = evaluate ctx e1
+    let val2 = evaluate ctx e2
+    ValTuple(val1, val2)
+
+
+  | TupleGet(b, e) ->
+    let v = (evaluate ctx e)
+    match v with
+    | ValTuple(v1, v2) ->
+        // Extract first or second element based on boolean
+        if b then v1 else v2
+    | _ -> failwith "TupleGet requires a tuple value"
+
+  | Match(e, v, e1, e2) ->
+      match evaluate ctx e with
+      | ValCase(true, x) -> 
+        let new_ctx = ctx.Add(v, Lazy(x))
+        evaluate new_ctx e1
+
+      |  ValCase(false, x) ->
+        let new_ctx = ctx.Add(v, Lazy(x))
+        evaluate new_ctx e2
+      | _ -> failwith "invalid match expression"
+
+  | Case(b, e) ->
+      ValCase(b, (evaluate ctx e))
+  | Recursive(v: string, e1: Expression, e2: Expression) ->
+      let rec lazy_closure: Lazy<Value> = lazy evaluate ctx_with_itself e1 
+      and ctx_with_itself = ctx.Add(v, lazy_closure)
+
+      evaluate ctx_with_itself e2
   | Unit -> ValUnit
 
 
@@ -97,35 +148,35 @@ let el = makeListExpr [ for i in 1 .. 5 -> Constant i ]
 //     | Case2(Unit) -> Case2(Unit))
 //   in map (fun y -> y * 10) l
 //
-let em = 
-  Recursive("map",
-    Lambda("f", Lambda("l", 
-      Match(
-        Variable("l"), "x",
-        Case(true, Tuple(
-          Application(Variable "f", TupleGet(true, Variable "x")),
-          Application(Application(Variable "map", Variable "f"), 
-            TupleGet(false, Variable "x"))
-        )),
-        Case(false, Unit)
-      )
-    )),
-    Application(Application(Variable "map", 
-      Lambda("y", Binary("*", Variable "y", Constant 10))), el)
-  )
-evaluate Map.empty em
+// let em = 
+//   Recursive("map",
+//     Lambda("f", Lambda("l", 
+//       Match(
+//         Variable("l"), "x",
+//         Case(true, Tuple(
+//           Application(Variable "f", TupleGet(true, Variable "x")),
+//           Application(Application(Variable "map", Variable "f"), 
+//             TupleGet(false, Variable "x"))
+//         )),
+//         Case(false, Unit)
+//       )
+//     )),
+//     Application(Application(Variable "map", 
+//       Lambda("y", Binary("*", Variable "y", Constant 10))), el)
+//   )
+// evaluate Map.empty em
 
-// TODO: Can you implement 'List.filter' in TinyML too??
-// The somewhat silly example removes 3 from the list.
-// Add '%' binary operator and you can remove odd/even numbers!
-//
-//   let rec filter = (fun f -> fun l -> 
-//     match l with 
-//     | Case1 t -> 
-//          if f x#1 then Case1(x#1, (map f) x#2) 
-//          else (map f) x#2
-//     | Case2(Unit) -> Case2(Unit))
-//   in map (fun y -> y + (-2)) l
-//
-let ef = failwith "not implemented"
-evaluate Map.empty ef
+// // TODO: Can you implement 'List.filter' in TinyML too??
+// // The somewhat silly example removes 3 from the list.
+// // Add '%' binary operator and you can remove odd/even numbers!
+// //
+// //   let rec filter = (fun f -> fun l -> 
+// //     match l with 
+// //     | Case1 t -> 
+// //          if f x#1 then Case1(x#1, (map f) x#2) 
+// //          else (map f) x#2
+// //     | Case2(Unit) -> Case2(Unit))
+// //   in map (fun y -> y + (-2)) l
+// //
+// let ef = failwith "not implemented"
+// evaluate Map.empty ef
