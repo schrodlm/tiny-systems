@@ -86,6 +86,7 @@ let rec evaluate (ctx:VariableContext) e =
   
   | Lambda(v, e) ->
       // TODO: Evaluate a lambda - create a closure value
+      //add closure to its own context - for recursive function
       ValClosure(v,e , ctx)
 
   | Application(e1, e2) ->
@@ -99,10 +100,8 @@ let rec evaluate (ctx:VariableContext) e =
       | ValClosure(param: string, body: Expression, closureCtx: VariableContext) ->
           // Create new context with the parameter bound to the argument value
           let newCtx: Map<string,Lazy<Value>> = closureCtx.Add(param, Lazy(val2))
-          // printfn "context of the closure: %A" closureCtx
           // Evaluate the body in the new context
-          let newMap = Map.fold (fun acc key value -> Map.add key value acc) ctx newCtx
-          evaluate newMap body
+          evaluate newCtx body
       | _ -> failwith "invalid application"
   | Let(v, e1, e2) ->
     // TODO: There are two ways to do this! A nice tricky is to 
@@ -140,7 +139,6 @@ let rec evaluate (ctx:VariableContext) e =
       | _ -> failwith "invalid match expression"
 
   | Case(b, e) ->
-      // TODO: Create a union value.
       ValCase(b, (evaluate ctx e))
   | Recursive(v: string, e1: Expression, e2: Expression) ->
       // TODO: Implement recursion for 'let rec v = e1 in e2'.
@@ -150,16 +148,12 @@ let rec evaluate (ctx:VariableContext) e =
       //What am I getting:
       //1. function name - is basically a variable
       //2. body of the function - 
-      //3. Call of the function with provided arguments -> application with the variable name
+      //3. Call of the recursive function with provided arguments -> application with the variable name
 
-      //What I am gonna do:
-      //1. Save the name of the function as a variable and the body as the contents (closure) - note: can do this because lazy eval
-      let lazy_closure: Lazy<Value> = lazy evaluate ctx e1
-      let ctx_with_lazy_closure: Map<string,Lazy<Value>> = ctx.Add(v, lazy_closure)
+      let rec lazy_closure: Lazy<Value> = lazy evaluate ctx_with_itself e1 
+      and ctx_with_itself = ctx.Add(v, lazy_closure)
 
-      let test = evaluate ctx_with_lazy_closure e2
-      printfn "Finished with: %A" test
-      test
+      evaluate ctx_with_itself e2
 
 
 
