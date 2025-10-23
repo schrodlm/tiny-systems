@@ -117,7 +117,10 @@ let rec evaluate (ctx:VariableContext) e =
       let rec lazy_closure: Lazy<Value> = lazy evaluate ctx_with_itself e1 
       and ctx_with_itself = ctx.Add(v, lazy_closure)
 
-      evaluate ctx_with_itself e2
+      let evaluated: Value = evaluate ctx_with_itself e2
+      printfn "Evaluated rec: %A" evaluated
+      evaluated
+
   | Unit -> ValUnit
 
 
@@ -139,6 +142,7 @@ let rec makeListExpr l =
   | [] -> Case(false, Unit)
 
 let el = makeListExpr [ for i in 1 .. 5 -> Constant i ]
+printfn "List: %A" el
 
 // List.map function in TinyML:
 //
@@ -148,35 +152,35 @@ let el = makeListExpr [ for i in 1 .. 5 -> Constant i ]
 //     | Case2(Unit) -> Case2(Unit))
 //   in map (fun y -> y * 10) l
 //
-// let em = 
-//   Recursive("map",
-//     Lambda("f", Lambda("l", 
-//       Match(
-//         Variable("l"), "x",
-//         Case(true, Tuple(
-//           Application(Variable "f", TupleGet(true, Variable "x")),
-//           Application(Application(Variable "map", Variable "f"), 
-//             TupleGet(false, Variable "x"))
-//         )),
-//         Case(false, Unit)
-//       )
-//     )),
-//     Application(Application(Variable "map", 
-//       Lambda("y", Binary("*", Variable "y", Constant 10))), el)
-//   )
-// evaluate Map.empty em
+let em = 
+  Recursive("map",
+    Lambda("f", Lambda("l", 
+      Match(
+        Variable("l"), "x",
+        Case(true, Tuple(
+          Application(Variable "f", TupleGet(true, Variable "x")),
+          Application(Application(Variable "map", Variable "f"), 
+            TupleGet(false, Variable "x"))
+        )),
+        Case(false, Unit)
+      )
+    )),
+    Application(Application(Variable "map", 
+      Lambda("y", Binary("*", Variable "y", Constant 10))), el)
+  )
+evaluate Map.empty em
 
-// // TODO: Can you implement 'List.filter' in TinyML too??
-// // The somewhat silly example removes 3 from the list.
-// // Add '%' binary operator and you can remove odd/even numbers!
-// //
-// //   let rec filter = (fun f -> fun l -> 
-// //     match l with 
-// //     | Case1 t -> 
-// //          if f x#1 then Case1(x#1, (map f) x#2) 
-// //          else (map f) x#2
-// //     | Case2(Unit) -> Case2(Unit))
-// //   in map (fun y -> y + (-2)) l
-// //
-// let ef = failwith "not implemented"
-// evaluate Map.empty ef
+// TODO: Can you implement 'List.filter' in TinyML too??
+// The somewhat silly example removes 3 from the list.
+// Add '%' binary operator and you can remove odd/even numbers!
+//
+//   let rec filter = (fun f -> fun l -> 
+//     match l with 
+//     | Case1 t -> 
+//          if f x#1 then Case1(x#1, (map f) x#2) 
+//          else (map f) x#2
+//     | Case2(Unit) -> Case2(Unit))
+//   in map (fun y -> y + (-2)) l
+//
+let ef = failwith "not implemented"
+evaluate Map.empty ef
