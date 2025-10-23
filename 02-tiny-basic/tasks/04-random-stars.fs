@@ -24,6 +24,7 @@ type Command =
   // memory location, but we only use it for screen access here.
   | Clear
   | Poke of Expression * Expression * Expression
+  | Empty
 
 type State = 
   { Program : list<int * Command> 
@@ -35,9 +36,30 @@ type State =
 // Utilities
 // ----------------------------------------------------------------------------
 
-let printValue value = failwith "implemented in steps 1 and 3"
-let getLine state line = failwith "implemented in step 1"
-let addLine state (line, cmd) = failwith "implemented in step 2"
+let printValue value : Unit = 
+  match value with
+  | StringValue str-> 
+    printfn "%s" str
+  | NumberValue n ->
+    printfn "%d" n
+  | BoolValue b ->
+    if b then printfn "true" else printfn "false"
+
+
+let getLine state line =
+  match state.Program |> List.tryFind( fun (next_line, _) -> next_line > line) with
+  | Some (next_line, cmd) -> (next_line, cmd)
+  | None -> (-1, Empty)
+
+let addLine state (line, cmd) = 
+  let updatedProgram = 
+    state.Program 
+    |> List.filter (fun (existing_line,_) -> existing_line <> line)
+    |> fun program -> (line, cmd) :: program
+    |> List.sortBy fst
+  
+  {state with Program = updatedProgram}
+
 
 // ----------------------------------------------------------------------------
 // Evaluator
@@ -50,35 +72,90 @@ let binaryRelOp f args =
   | [NumberValue a; NumberValue b] -> BoolValue(f a b)
   | _ -> failwith "expected two numerical arguments"
 
-let rec evalExpression expr = 
-  // TODO: Add support for 'RND(N)' which returns a random number in range 0..N-1
-  // and for binary operators ||, <, > (and the ones you have already, i.e., - and =).
-  // To add < and >, you can use the 'binaryRelOp' helper above. You can similarly
-  // add helpers for numerical operators and binary Boolean operators to make
-  // your code a bit nicer.
-  failwith "implemented in steps 1 and 3"
+let rec evalExpression (expr: Expression, state: State) : Value =  
+  match expr with 
+  | Const c -> c 
+  | Function (name, expr_list) ->
+    match name with 
+    | "+" -> 
+        let evaluatedArgs = List.map (fun expr -> evalExpression (expr, state)) expr_list
+        match evaluatedArgs with 
+        | [NumberValue lhs; NumberValue rhs] -> NumberValue(lhs + rhs)
+        | _ -> failwith "Invalid arguments for + function"
+    
+    | "-" -> 
+        let evaluatedArgs = List.map (fun expr -> evalExpression (expr, state)) expr_list
+        match evaluatedArgs with 
+        | [NumberValue lhs; NumberValue rhs] -> NumberValue(lhs - rhs)
+        | _ -> failwith "Invalid arguments for - function"
+
+    | "=" -> 
+        let evaluatedArgs = List.map (fun expr -> evalExpression (expr, state)) expr_list
+        match evaluatedArgs with
+        | [NumberValue lhs; NumberValue rhs] -> BoolValue(lhs = rhs)
+        | _ -> failwith "Invalid arguments for = function"
+    | _ -> failwith "Only binary options implemented"
+
+  | Variable v ->
+    match state.Variables |> Map.tryFind v with
+    | Some value -> 
+    value // Return the variable's value if it exists
+    | None -> failwithf "Variable '%s' not found" v // Handle missing variable
 
 let rec runCommand state (line, cmd) =
   match cmd with 
+  | Print(expr) ->
+      let value = evalExpression(expr,state)
+      printValue value 
+      runNextLine state line
   | Run ->
       let first = List.head state.Program    
       runCommand state first
+  | Goto targetLine ->
+      let adjustedLine = targetLine - 1
+      let (new_line, new_cmd) = getLine state adjustedLine
+      runCommand state (new_line, new_cmd)
+  | Empty ->
+      ignore
 
-  | Print(expr) -> failwith "implemented in step 1"
-  | Goto(line) -> failwith "implemented in step 1"
-  | Assign _ | If _ -> failwith "implemented in step 3"
+  | Assign (name, expr) -> 
+    let evaluated = evalExpression (expr, state)
+    let updated_context = state.Variables.Add(name, evaluated)
+    runNextLine { state with Variables = updated_context } line
+
+  | If (expr, cmd)  -> 
+    let evaluated: Value = evalExpression(expr, state)
+    match evaluated with
+    | BoolValue(true) -> 
+      runCommand state (-1, cmd)
+    | BoolValue(false) ->
+      runNextLine state line
+    | _ -> failwith "Not valid expression in an if statement"
   
   // TODO: Implement two commands for screen manipulation
   | Clear | Poke _ -> failwith "not implemented"
 
-and runNextLine state line = failwith "implemented in step 1"
+and runNextLine state line = 
+  let (next_line, next_cmd) = getLine state line
+  match next_line with 
+  | -1 -> ignore
+  | _ -> runCommand state (next_line,  next_cmd)
 
 // ----------------------------------------------------------------------------
 // Interactive program editing
 // ----------------------------------------------------------------------------
 
-let runInput state (line, cmd) = failwith "implemented in step 2"
-let runInputs state cmds = failwith "implemented in step 2"
+let runInput (state : State) (line :option<int>, cmd : Command) : State =
+  match line with
+  | None -> 
+    runCommand state (-1, cmd)
+    state 
+
+  | Some ln ->
+    addLine state (ln, cmd)
+
+let runInputs (state: State) (cmds: list<option<int> * Command>) : State =
+  List.fold (fun accState cmd -> runInput accState cmd) state cmds
 
 // ----------------------------------------------------------------------------
 // Test cases
