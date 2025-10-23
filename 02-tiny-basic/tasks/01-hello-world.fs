@@ -19,10 +19,8 @@ type Expression =
 type Command = 
   | Print of Expression
   | Run 
-  // NOTE: GOTO specified line number. Note that this is an integer, rather 
-  // than an expression, so you cannot calculate line number dynamically. 
-  // (But there are tricks to do this by direct memory access on a real C64!)
   | Goto of int
+  | Empty
 
 type State = 
   { Program : list<int * Command> }
@@ -31,42 +29,45 @@ type State =
 // Utilities
 // ----------------------------------------------------------------------------
 
-let printValue value = 
-  // TODO: Take 'value' of type 'Value', pattern match on it and print it nicely.
-  failwith "not implemented"
+let printValue value : Unit = 
+  match value with
+  | StringValue str-> 
+    printfn "%s" str
+
+  | _ -> failwith "Not a valid value to print"
 
 let getLine state line =
-  // TODO: Get a line with a given number from 'state.Program' (this can fail 
-  // if the line is not there.) You need this in the 'Goto' command case below.
-  failwith "not implemented"
+  match state.Program |> List.tryFind( fun (next_line, _) -> next_line > line) with
+  | Some (next_line, cmd) -> (next_line, cmd)
+  | None -> (-1, Empty)
 
 // ----------------------------------------------------------------------------
 // Evaluator
 // ----------------------------------------------------------------------------
 
-let rec evalExpression expr = 
-  // TODO: Implement evaluation of expressions. The function should take 
-  // 'Expression' and return 'Value'. In this step, it is trivial :-)
-  failwith "not implemented"
+let rec evalExpression (expr: Expression) : Value =  
+  match expr with 
+  | Const c -> c 
 
 let rec runCommand state (line, cmd) =
   match cmd with 
   | Print(expr) ->
-      // TODO: Evaluate the expression and print the resulting value here!
-      failwith "not implemented"
+      let value = evalExpression expr
+      printValue value 
       runNextLine state line
   | Run ->
       let first = List.head state.Program    
       runCommand state first
-  | Goto(line) ->
-      // TODO: Find the right line of the program using 'getLine' and call 
-      // 'runCommand' recursively on the found line to evaluate it.
-      failwith "not implemented"
-
+  | Goto targetLine ->
+      let adjustedLine = targetLine - 1
+      let (new_line, new_cmd) = getLine state adjustedLine
+      runCommand state (new_line, new_cmd)
 and runNextLine state line = 
-  // TODO: Find a program line with the number greater than 'line' and evalaute
-  // it using 'runCommand' (if found) or just return 'state' (if not found).
-  failwith "not implemented"
+  let (next_line, next_cmd) = getLine state line
+  match next_line with 
+  | -1 -> ignore
+  | _ -> runCommand state (next_line,  next_cmd)
+  
 
 // ----------------------------------------------------------------------------
 // Test cases
@@ -76,14 +77,12 @@ let helloOnce =
   { Program = [ 
       10, Print (Const (StringValue "HELLO WORLD\n")) ] }
 
+runCommand helloOnce (-1, Run) |> ignore
+
 let helloInf = 
   { Program = [ 
       10, Print (Const (StringValue "HELLO WORLD\n")) 
       20, Goto 10 ] }
 
-// NOTE: First try to get the following to work!
-runCommand helloOnce (-1, Run) |> ignore
-
-// NOTE: Then add 'Goto' and get the following to work!
 runCommand helloInf (-1, Run) |> ignore
 
