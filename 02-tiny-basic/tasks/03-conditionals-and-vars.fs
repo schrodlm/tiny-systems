@@ -25,6 +25,7 @@ type Command =
   // runs a given Command only if the expression evaluates to 'BoolValue(true)'
   | Assign of string * Expression
   | If of Expression * Command
+  | Empty
 
 type State = 
   { Program : list<int * Command> 
@@ -35,36 +36,50 @@ type State =
 // Utilities
 // ----------------------------------------------------------------------------
 
-let printValue value = 
-  // TODO: Add support for printing NumberValue and BoolValue
-  failwith "implemented in step 1"
+let printValue value : Unit = 
+  match value with
+  | StringValue str-> 
+    printfn "%s" str
 
-let getLine state line = failwith "implemented in step 1"
-let addLine state (line, cmd) = failwith "implemented in step 2"
+  | _ -> failwith "Not a valid value to print"
+
+let getLine state line =
+  match state.Program |> List.tryFind( fun (next_line, _) -> next_line > line) with
+  | Some (next_line, cmd) -> (next_line, cmd)
+  | None -> (-1, Empty)
+let addLine state (line, cmd) = 
+  let updatedProgram = 
+    state.Program 
+    |> List.filter (fun (existing_line,_) -> existing_line <> line)
+    |> fun program -> (line, cmd) :: program
+    |> List.sortBy fst
+  
+  {state with Program = updatedProgram}
+
 
 // ----------------------------------------------------------------------------
 // Evaluator
 // ----------------------------------------------------------------------------
 
-let rec evalExpression expr = 
-  // TODO: Add support for 'Function' and 'Variable'. For now, handle just the two
-  // functions we need, i.e. "-" (takes two numbers & returns a number) and "="
-  // (takes two values and returns Boolean). Note that you can test if two
-  // F# values are the same using '='. It works on values of type 'Value' too.
-  //
-  // HINT: You will need to pass the program state to 'evalExpression' 
-  // in order to be able to handle variables!
-  failwith "implemented in step 1"
+let rec evalExpression (expr: Expression) : Value =  
+  match expr with 
+  | Const c -> c 
 
 let rec runCommand state (line, cmd) =
   match cmd with 
+  | Print(expr) ->
+      let value = evalExpression expr
+      printValue value 
+      runNextLine state line
   | Run ->
       let first = List.head state.Program    
       runCommand state first
-
-  | Print(expr) -> failwith "implemented in step 1"
-  | Goto(line) -> failwith "implemented in step 1"
-  
+  | Goto targetLine ->
+      let adjustedLine = targetLine - 1
+      let (new_line, new_cmd) = getLine state adjustedLine
+      runCommand state (new_line, new_cmd)
+  | Empty ->
+      ignore
   // TODO: Implement assignment and conditional. Assignment should run the
   // next line after setting the variable value. 'If' is a bit trickier:
   // * 'L1: IF TRUE THEN GOTO <L2>' will continue evaluating on line 'L2'
@@ -75,14 +90,30 @@ let rec runCommand state (line, cmd) =
   // the command in the 'THEN' branch and the current line as the line number.
   | Assign _ | If _ -> failwith "not implemented"
 
-and runNextLine state line = failwith "implemented in step 1"
+and runNextLine state line = 
+  let (next_line, next_cmd) = getLine state line
+  match next_line with 
+  | -1 -> ignore
+  | _ -> runCommand state (next_line,  next_cmd)
 
 // ----------------------------------------------------------------------------
 // Interactive program editing
 // ----------------------------------------------------------------------------
 
-let runInput state (line, cmd) = failwith "implemented in step 2"
-let runInputs state cmds = failwith "implemented in step 2"
+let runInput (state : State) (line :option<int>, cmd : Command) : State =
+  match line with
+  | None -> 
+    runCommand state (-1, cmd)
+    state 
+
+  | Some ln ->
+    addLine state (ln, cmd)
+
+
+
+let runInputs (state: State) (cmds: list<option<int> * Command>) : State =
+  List.fold (fun accState cmd -> runInput accState cmd) state cmds
+
 
 // ----------------------------------------------------------------------------
 // Test cases
