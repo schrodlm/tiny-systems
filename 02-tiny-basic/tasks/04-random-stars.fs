@@ -29,7 +29,7 @@ type Command =
 type State = 
   { Program : list<int * Command> 
     Variables : Map<string, Value> 
-    // TODO: You will need to include random number generator in the state!
+    Random : System.Random
     }
 
 // ----------------------------------------------------------------------------
@@ -94,7 +94,32 @@ let rec evalExpression (expr: Expression, state: State) : Value =
         match evaluatedArgs with
         | [NumberValue lhs; NumberValue rhs] -> BoolValue(lhs = rhs)
         | _ -> failwith "Invalid arguments for = function"
-    | _ -> failwith "Only binary options implemented"
+    
+    | "||" ->
+        let evaluatedArgs = List.map(fun expr -> evalExpression(expr, state)) expr_list
+        match evaluatedArgs with 
+        | [BoolValue lhs; BoolValue rhs;] -> BoolValue(lhs || rhs)
+        | _ -> failwith "Invalid arguments for || function"
+
+    | "<" ->
+        let evaluatedArgs = List.map(fun expr -> evalExpression(expr, state)) expr_list
+        match evaluatedArgs with 
+        | [NumberValue lhs; NumberValue rhs;] -> BoolValue(lhs < rhs)
+        | _ -> failwith "Invalid arguments for < function"
+
+    | ">" ->
+        let evaluatedArgs = List.map(fun expr -> evalExpression(expr, state)) expr_list
+        match evaluatedArgs with 
+        | [NumberValue lhs; NumberValue rhs;] -> BoolValue(lhs > rhs)
+        | _ -> failwith "Invalid arguments for > function"
+    
+    | "RND" ->
+        let evaluatedArgs = List.map(fun expr -> evalExpression(expr, state)) expr_list
+        match evaluatedArgs with 
+        | [NumberValue max]-> NumberValue(state.Random.Next(max))
+        | _ -> failwith "Invalid arguments for RND function"
+
+    | _ -> failwith $"Unsupported function {name}"
 
   | Variable v ->
     match state.Variables |> Map.tryFind v with
@@ -111,7 +136,7 @@ let rec runCommand state (line, cmd) =
   | Run ->
       let first = List.head state.Program    
       runCommand state first
-  | Goto targetLine ->
+  | Goto (targetLine: int) ->
       let adjustedLine = targetLine - 1
       let (new_line, new_cmd) = getLine state adjustedLine
       runCommand state (new_line, new_cmd)
@@ -133,8 +158,22 @@ let rec runCommand state (line, cmd) =
     | _ -> failwith "Not valid expression in an if statement"
   
   // TODO: Implement two commands for screen manipulation
-  | Clear | Poke _ -> failwith "not implemented"
+  | Clear -> 
+    System.Console.Clear()
+    runNextLine state line
+  
+  | Poke (x_expr, y_expr, val_expr) ->
+    let x_val = evalExpression(x_expr, state)
+    let y_val = evalExpression(y_expr, state)
+    let value = evalExpression(val_expr, state)
 
+    match x_val, y_val, value with
+      | NumberValue(x), NumberValue(y), StringValue(v) -> 
+          System.Console.SetCursorPosition(x,y)
+          System.Console.Write(v)
+          runNextLine state line
+      | _ -> failwith "Poke expects x:number, y:number, value:string arguments"
+  
 and runNextLine state line = 
   let (next_line, next_cmd) = getLine state line
   match next_line with 
@@ -177,7 +216,7 @@ let (.-) a b = Function("-", [a; b])
 let (.=) a b = Function("=", [a; b])
 let (@) s args = Function(s, args)
 
-let empty = { Program = []; Variables = Map.empty } // TODO: Add random number generator!
+let empty = { Program = []; Variables = Map.empty; Random = System.Random()}
 
 // NOTE: Random stars generation. This has hard-coded max width and height (60x20)
 // but you could use 'System.Console.WindowWidth'/'Height' here to make it nicer.
