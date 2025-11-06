@@ -21,15 +21,42 @@ type Type =
 // Constraint solving
 // ----------------------------------------------------------------------------
 
-let rec occursCheck vcheck ty = 
-  failwith "implemented in step 2"
-let rec substType (subst:Map<_, _>) t1 = 
-  failwith "implemented in step 2"
-let substConstrs subst cs = 
-  failwith "implemented in step 2"
+let rec occursCheck (v: string) (ty: Type) =
+  match ty with 
+    | TyVariable name -> name = v
+    | TyBool -> false
+    | TyNumber -> false 
+    | TyList inner-> occursCheck v inner 
+let rec substType (subst:Map<string, Type>) ty:Type = 
+  match ty with
+  | TyVariable name -> 
+    match Map.tryFind name subst with
+    | Some t -> substType subst t
+    | None -> ty
+  | TyList inner -> TyList (substType subst inner)
+  | _ -> ty
+let substConstrs (subst:Map<string, Type>) (cs:list<Type * Type>) = 
+  cs |> List.map(fun(lhs, rhs) -> substType subst lhs, substType subst rhs)
+
  
-let rec solve constraints =
-  failwith "implemente in step 2"
+let rec solve cs =
+  match cs with 
+  | [] -> []
+  | (TyNumber, TyNumber)::cs -> solve cs
+  | (TyBool, TyBool)::cs -> solve cs
+  | (TyList inner_lhs, TyList inner_rhs)::cs -> solve ((inner_lhs, inner_rhs)::cs)
+  | (TyVariable v1, TyVariable v2)::cs when v1=v2 -> solve cs
+  | (TyVariable v, t)::cs
+  | (t, TyVariable v)::cs ->
+    if occursCheck v t then
+      failwith "Cycle occurs in constrains"
+    else 
+      let subst = Map [(v,t)]
+      let new_cs = substConstrs subst cs
+      let rest_substs = solve new_cs
+      (v,t)::rest_substs
+  | _ -> failwith "Can't solve contraints"
+
 
 // ----------------------------------------------------------------------------
 // Constraint generation & inference
