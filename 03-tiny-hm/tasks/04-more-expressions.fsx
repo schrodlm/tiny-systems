@@ -24,21 +24,46 @@ type Type =
 // Constraint solving
 // ----------------------------------------------------------------------------
 
-let rec occursCheck vcheck ty = 
+let rec occursCheck (v:string) (ty:Type) = 
   // TODO: Add case for 'TyFunction' (need to check both nested types)
-  failwith "not implemented"
+  match ty with 
+    | TyVariable name -> name = v
+    | TyBool -> false
+    | TyNumber -> false 
+    | TyList inner-> occursCheck v inner 
 
 let rec substType (subst:Map<_, _>) t1 = 
   // TODO: Add case for 'TyFunction' (need to substitute in both nested types)
-  failwith "not implemented"
+  match t1 with
+  | TyVariable name -> 
+    match Map.tryFind name subst with
+    | Some t -> substType subst t
+    | None -> t1
+  | TyList inner -> TyList (substType subst inner)
+  | _ -> t1
 
-let substConstrs subst cs = 
-  failwith "implemented in step 2"
+let substConstrs (subst:Map<string, Type>) (cs:list<Type * Type>) = 
+  cs |> List.map(fun(lhs, rhs) -> substType subst lhs, substType subst rhs)
  
-let rec solve constraints =
+let rec solve cs =
+  match cs with 
+  | [] -> []
+  | (TyNumber, TyNumber)::cs -> solve cs
+  | (TyBool, TyBool)::cs -> solve cs
+  | (TyList inner_lhs, TyList inner_rhs)::cs -> solve ((inner_lhs, inner_rhs)::cs)
+  | (TyVariable v1, TyVariable v2)::cs when v1=v2 -> solve cs
+  | (TyVariable v, t)::cs
+  | (t, TyVariable v)::cs ->
+    if occursCheck v t then
+      failwith "Cycle occurs in constrains"
+    else 
+      let subst = Map [(v,t)]
+      let new_cs = substConstrs subst cs
+      let rest_substs = solve new_cs
+      (v,t)::rest_substs
+  | _ -> failwith "Can't solve contraints"
   // TODO: Add case matching TyFunction(ta1, tb1) and TyFunction(ta2, tb2)
   // This generates two new constraints, equating the argument/return types.
-  failwith "not implemented"
 
 
 // ----------------------------------------------------------------------------
@@ -55,12 +80,34 @@ let newTyVariable =
 
 let rec generate (ctx:TypingContext) e = 
   match e with 
-  | Constant _ -> failwith "implemented in step 3"
-  | Binary("+", e1, e2) -> failwith "implemented in step 3"
-  | Binary("=", e1, e2) -> failwith "implemented in step 3"
-  | Binary(op, _, _) -> failwith "implemented in step 3"
-  | Variable v -> failwith "implemented in step 3"
-  | If(econd, etrue, efalse) -> failwith "implemented in step 3"
+  | Constant _ -> 
+      TyNumber, []
+
+  | Binary("+", e1, e2) ->
+      let t1, s1 = generate ctx e1
+      let t2, s2 = generate ctx e2
+      TyNumber, s1 @ s2 @ [ t1, TyNumber; t2, TyNumber ]
+
+  | Binary("=", e1, e2) ->
+      let (t1: Type), (c1: (Type*Type) list) = generate ctx e1
+      let (t2: Type), (c2: (Type*Type) list) = generate ctx e2
+
+      TyBool, c1 @ c2 @ [t1, TyNumber;t2, TyNumber]
+
+  | Binary(op, _, _) ->
+      failwithf "Binary operator '%s' not supported." op
+
+  | Variable v -> 
+      match Map.tryFind v ctx with
+        | Some t -> t, []
+        | None -> failwith "Not a defined type"
+
+  | If(econd, etrue, efalse) ->
+      let (t1: Type), (c1: (Type*Type) list) = generate ctx econd
+      let (t2: Type), (c2: (Type*Type) list) = generate ctx etrue
+      let (t3: Type), (c3: (Type*Type) list) = generate ctx efalse
+
+      t2, c1 @ c2 @ c3 @ [t1, TyBool;t2, t3];
 
   | Let(v, e1, e2) ->
       // TODO: Generate type & constraints for 'e1' first and then
