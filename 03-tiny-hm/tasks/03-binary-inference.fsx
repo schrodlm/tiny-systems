@@ -82,20 +82,29 @@ let rec generate (ctx:TypingContext) e =
 
   | Binary("=", e1, e2) ->
       // TODO: Similar to the case for '+' but returns 'TyBool'
-      failwith "not implemented"
+      let (t1: Type), (c1: (Type*Type) list) = generate ctx e1
+      let (t2: Type), (c2: (Type*Type) list) = generate ctx e2
+
+      TyBool, c1 @ c2 @ [t1, TyNumber;t2, TyNumber]
 
   | Binary(op, _, _) ->
       failwithf "Binary operator '%s' not supported." op
 
   | Variable v -> 
       // TODO: Just get the type of the variable from 'ctx' here.
-      failwith "not implemented"
+      match Map.tryFind v ctx with
+        | Some t -> t, []
+        | None -> failwith "Not a defined type"
 
   | If(econd, etrue, efalse) ->
       // TODO: Call generate recursively on all three sub-expressions,
       // collect all constraints and add a constraint that (i) the type
       // of 'econd' is 'TyBool' and (ii) types of 'etrue' and 'efalse' match.
-      failwith "not implemented"
+      let (t1: Type), (c1: (Type*Type) list) = generate ctx econd
+      let (t2: Type), (c2: (Type*Type) list) = generate ctx etrue
+      let (t3: Type), (c3: (Type*Type) list) = generate ctx efalse
+
+      t2, c1 @ c2 @ c3 @ [t1, TyBool;t2, t3];
 
 
 // ----------------------------------------------------------------------------
