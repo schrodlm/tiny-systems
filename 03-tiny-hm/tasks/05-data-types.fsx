@@ -34,10 +34,9 @@ let rec occursCheck (v:string) (ty:Type) =
     | TyNumber -> false 
     | TyList inner-> occursCheck v inner
     | TyFunction (arg, ret) -> occursCheck v ret || occursCheck v arg
-    | TyTuple(t1, t2) -> failwith "TODO"
+    | TyTuple(t1, t2) -> occursCheck v t1 || occursCheck v t2
 
 let rec substType (subst:Map<_, _>) t1 = 
-  // TODO: Add case for 'TyFunction' (need to substitute in both nested types)
   match t1 with
   | TyVariable name -> 
     match Map.tryFind name subst with
@@ -46,7 +45,8 @@ let rec substType (subst:Map<_, _>) t1 =
   | TyList inner -> TyList (substType subst inner)
   | TyFunction (arg, ret) -> 
     TyFunction(substType subst arg, substType subst ret)
-  | TyTuple(t1,t2) -> failwith"TODO"
+  | TyTuple(t1,t2) -> 
+    TyTuple(substType subst t1, substType subst t2)
   | _ -> t1
 
 let substConstrs (subst:Map<string, Type>) (cs:list<Type * Type>) = 
@@ -62,7 +62,7 @@ let rec solve cs =
   | (TyFunction(arg1, ret1), TyFunction(arg2, ret2))::cs -> 
     solve((arg1,arg2)::(ret1,ret2)::cs)
   | (TyTuple(t1, t2), TyTuple(t3,t4))::cs ->
-    failwith "TODO"
+    solve((t1,t3)::(t2,t4)::cs)
   | (TyVariable v, t)::cs
   | (t, TyVariable v)::cs ->
     if occursCheck v t then
@@ -155,12 +155,19 @@ let rec generate (ctx:TypingContext) e =
 
   | Tuple(e1, e2) ->
       // TODO: Easy. The returned type is composed of the types of 'e1' and 'e2'.
-      failwith "TODO"
+      let t1, c1 = generate ctx e1
+      let t2, c2 = generate ctx e2
+
+      TyTuple(t1,t2), c1@c2
 
   | TupleGet(b, e) ->
       // TODO: Trickier. The type of 'e' is some tuple, but we do not know what.
       // We need to generate two new type variables and a constraint.
-      failwith "TODO"
+      let t1, c1 = generate ctx e
+      let var1 = newTyVariable()
+      let var2 = newTyVariable()
+
+      t1, c1 @ [t1, TyTuple(var1, var2)]
 
   
 
@@ -183,19 +190,19 @@ etup |> infer
 TupleGet(true, etup) |> infer
 TupleGet(false, etup) |> infer
 
-// Interesting case with a nested tuple ('a * ('b * 'c) -> 'a * 'b)
-// * fun x -> x#1, x#2#1
+// // Interesting case with a nested tuple ('a * ('b * 'c) -> 'a * 'b)
+// // * fun x -> x#1, x#2#1
 Lambda("x", Tuple(TupleGet(true, Variable "x"), 
   TupleGet(true, TupleGet(false, Variable "x"))))
 |> infer
 
-// Does not type check - 'int' is not a tuple!
-// * (1+2)#1
-TupleGet(true, Binary("+", Constant 1, Constant 2)) |> infer
+// // Does not type check - 'int' is not a tuple!
+// // * (1+2)#1
+// TupleGet(true, Binary("+", Constant 1, Constant 2)) |> infer
 
 
-// Combining functions and tuples ('b -> (('b -> 'a) -> ('b * 'a)))
-// * fun x f -> (x, f x)   
+// // Combining functions and tuples ('b -> (('b -> 'a) -> ('b * 'a)))
+// // * fun x f -> (x, f x)   
 Lambda("x", Lambda("f", 
   Tuple(Variable "x", 
     Application(Variable "f", Variable "x"))))
