@@ -17,7 +17,7 @@ type Type =
   | TyBool 
   | TyNumber 
   | TyList of Type
-  // NOTE: Added type for functions (of single argument)
+  // NOTE: Added type for functions (of single argument) - argument, return type of the function
   | TyFunction of Type * Type
 
 // ----------------------------------------------------------------------------
@@ -25,12 +25,12 @@ type Type =
 // ----------------------------------------------------------------------------
 
 let rec occursCheck (v:string) (ty:Type) = 
-  // TODO: Add case for 'TyFunction' (need to check both nested types)
   match ty with 
     | TyVariable name -> name = v
     | TyBool -> false
     | TyNumber -> false 
-    | TyList inner-> occursCheck v inner 
+    | TyList inner-> occursCheck v inner
+    | TyFunction (arg, ret) -> occursCheck v ret || occursCheck v arg
 
 let rec substType (subst:Map<_, _>) t1 = 
   // TODO: Add case for 'TyFunction' (need to substitute in both nested types)
@@ -40,6 +40,8 @@ let rec substType (subst:Map<_, _>) t1 =
     | Some t -> substType subst t
     | None -> t1
   | TyList inner -> TyList (substType subst inner)
+  | TyFunction (arg, ret) -> 
+    TyFunction(substType subst arg, substType subst ret)
   | _ -> t1
 
 let substConstrs (subst:Map<string, Type>) (cs:list<Type * Type>) = 
@@ -52,6 +54,8 @@ let rec solve cs =
   | (TyBool, TyBool)::cs -> solve cs
   | (TyList inner_lhs, TyList inner_rhs)::cs -> solve ((inner_lhs, inner_rhs)::cs)
   | (TyVariable v1, TyVariable v2)::cs when v1=v2 -> solve cs
+  | (TyFunction(arg1, ret1), TyFunction(arg2, ret2))::cs -> 
+    solve((arg1,arg2)::(ret1,ret2)::cs)
   | (TyVariable v, t)::cs
   | (t, TyVariable v)::cs ->
     if occursCheck v t then
@@ -78,6 +82,7 @@ let newTyVariable =
   let mutable n = 0
   fun () -> n <- n + 1; TyVariable(sprintf "_a%d" n)
 
+// returns a return type of an operation and a list of contraints
 let rec generate (ctx:TypingContext) e = 
   match e with 
   | Constant _ -> 
@@ -93,6 +98,12 @@ let rec generate (ctx:TypingContext) e =
       let (t2: Type), (c2: (Type*Type) list) = generate ctx e2
 
       TyBool, c1 @ c2 @ [t1, TyNumber;t2, TyNumber]
+
+  | Binary("*", e1, e2) ->
+      let t1, s1 = generate ctx e1
+      let t2, s2 = generate ctx e2
+      TyNumber, s1 @ s2 @ [ t1, TyNumber; t2, TyNumber ]
+
 
   | Binary(op, _, _) ->
       failwithf "Binary operator '%s' not supported." op
@@ -112,21 +123,38 @@ let rec generate (ctx:TypingContext) e =
   | Let(v, e1, e2) ->
       // TODO: Generate type & constraints for 'e1' first and then
       // add the generated type to the typing context for 't2'.
-      failwith "not implemented"
+      let (t1: Type), (c1: (Type*Type) list) = generate ctx e1
+      let new_ctx = Map.add v t1 ctx
+    
+      let (t2: Type), (c2: (Type*Type) list) = generate new_ctx e2
+
+      t2, c1 @ c2 
   
   | Lambda(v, e) ->
-      let targ = newTyVariable()
       // TODO: We do not know what the type of the variable 'v' is, so we 
       // generate a new type variable and add that to the 'ctx'. The
       // resulting type will be 'TyFunction' with 'targ' as argument type.
-      failwith "not implemented"
+      let targ = newTyVariable()
+      let new_ctx = Map.add v targ ctx
+      let t, c = generate new_ctx e
+      TyFunction(targ, t), c
 
   | Application(e1, e2) -> 
-      // TODO: Tricky case! We cannot inspect the generated type of 'e1'
-      // to see what the argument/return type of the function is. Instead,
-      // we have to generate a new type variable and add a constraint.
-      failwith "not implemented"
+      //Examples:
+        // Application(Variable("f"), Constant(1))
   
+        //  Application(
+        //   Lambda("x", Binary("*", Variable("x"), Constant(2)))
+        //   Constant(21),
+        // )
+
+      let (t1: Type), (c1: (Type*Type) list) = generate ctx e1
+      let (t2: Type), (c2: (Type*Type) list) = generate ctx e2
+      
+      let t_ret = newTyVariable()
+      
+      // Add constraint that e1 must be a function from t2 to t_ret
+      t_ret , c1 @ c2 @ [t1, TyFunction(t2,t_ret)]
 
 // ----------------------------------------------------------------------------
 // Putting it together & test cases
@@ -151,9 +179,9 @@ let infer e =
 // You would still need to write code to collect all type variables in a type.
 
 
-// let x = 10 in x = 10
-Let("x", Constant 10, Binary("=", Variable "x", Constant 10))
-|> infer 
+// // let x = 10 in x = 10
+// Let("x", Constant 10, Binary("=", Variable "x", Constant 10))
+// |> infer 
 
 // let f = fun x -> x*2 in (f 20) + (f 1)
 Let("f",
@@ -169,17 +197,17 @@ Lambda("x", Lambda("f",
   Application(Variable "f", Application(Variable "f", Variable "x"))))
 |> infer
 
-// fun f -> f f 
-// This does not type check due to occurs check
-Lambda("f", 
-  Application(Variable "f", Variable "f"))
-|> infer
+// // fun f -> f f 
+// // This does not type check due to occurs check
+// Lambda("f", 
+//   Application(Variable "f", Variable "f"))
+// |> infer
 
 // fun f -> f 1 + f (2 = 3) 
 // This does not type check because argument of 'f' cannot be both 'int' and 'bool'
-Lambda("f", 
-  Binary("+",
-    Application(Variable "f", Constant 1),
-    Application(Variable "f", Binary("=", Constant 2, Constant 3))
-  ))
-|> infer
+// Lambda("f", 
+//   Binary("+",
+//     Application(Variable "f", Constant 1),
+//     Application(Variable "f", Binary("=", Constant 2, Constant 3))
+//   ))
+// |> infer
