@@ -66,8 +66,6 @@ let rec solve cs =
       let rest_substs = solve new_cs
       (v,t)::rest_substs
   | _ -> failwith "Can't solve contraints"
-  // TODO: Add case matching TyFunction(ta1, tb1) and TyFunction(ta2, tb2)
-  // This generates two new constraints, equating the argument/return types.
 
 
 // ----------------------------------------------------------------------------
@@ -121,8 +119,6 @@ let rec generate (ctx:TypingContext) e =
       t2, c1 @ c2 @ c3 @ [t1, TyBool;t2, t3];
 
   | Let(v, e1, e2) ->
-      // TODO: Generate type & constraints for 'e1' first and then
-      // add the generated type to the typing context for 't2'.
       let (t1: Type), (c1: (Type*Type) list) = generate ctx e1
       let new_ctx = Map.add v t1 ctx
     
@@ -131,9 +127,6 @@ let rec generate (ctx:TypingContext) e =
       t2, c1 @ c2 
   
   | Lambda(v, e) ->
-      // TODO: We do not know what the type of the variable 'v' is, so we 
-      // generate a new type variable and add that to the 'ctx'. The
-      // resulting type will be 'TyFunction' with 'targ' as argument type.
       let targ = newTyVariable()
       let new_ctx = Map.add v targ ctx
       let t, c = generate new_ctx e
