@@ -33,26 +33,45 @@ let rule p b = { Head = p; Body = b }
 let rec unifyLists l1 l2 : option<list<string * Term>> = 
   match l1, l2 with 
   | [], [] -> 
-      // TODO: Succeeds, but returns an empty substitution
-      failwith "not implemented"
-  | h1::t1, h2::t2 -> 
-      // TODO: Unify 'h1' with 'h2' using 'unify' and
-      // 't1' with 't2' using 'unifyLists'. If both 
-      // succeed, return the generated joint substitution!
-      failwith "not implemented"
-  | _ -> 
-    // TODO: Lists cannot be unified 
-    failwith "not implemented"
+      Some([])
 
-and unify t1 t2 : option<list<string * Term>> = 
+  //Unify 'h1' with 'h2' using 'unify' and
+  // 't1' with 't2' using 'unifyLists'. If both 
+  // succeed, return the generated joint substitution!
+  | h1::t1, h2::t2 -> 
+      let unify_head = unify h1 h2
+      let unify_rest = unifyLists t1 t2
+
+      match unify_head with 
+      | Some head_bindings -> //head sucessfully unified
+        match unify_rest with 
+        | Some rest_bindings ->
+          Some(head_bindings @ rest_bindings) 
+
+        | None ->
+          // head succeeded but rest failed
+          None
+      | None ->
+        // head unification failed
+        None
+
+  | _ -> 
+    None
+
+and unify (t1: Term) (t2: Term) : option<list<string * Term>> =
   match t1, t2 with 
-  | _ ->
-      // TODO: Add all the necessary cases here!
-      // * For matching atoms, return empty substitution
-      // * For matching predicates, return the result of 'unifyLists'
-      // * For variable and any term, return a new substitution
-      // * For anything else, return None (failed to unify) 
-      failwith "not implemented"
+  | Atom a1, Atom a2 ->  
+    Some([])
+  
+  | Predicate(name1, truths1), Predicate(name2, truths2) when name1 = name2 ->
+    unifyLists truths1 truths2
+
+  | Variable name, a
+  | a, Variable name ->
+    Some([(name, a)])
+
+  //failed to unify
+  | _ -> None
 
 // ----------------------------------------------------------------------------
 // Basic unification tests 
