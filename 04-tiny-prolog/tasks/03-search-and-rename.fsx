@@ -121,11 +121,17 @@ let nextNumber =
   let mutable n = 0
   fun () -> n <- n + 1; n
 
-let rec freeVariables term = 
-  // TODO: Return a list of all variables that appear in 'term'
-  // (this may contain duplicates, we will eliminate them below)
-  // HINT: Use List.collect: ('a -> list<'b>) -> list<'a> -> list<'b>
-  failwith "not implemented"
+let rec freeVariables (term: Term) = 
+  match term with
+    | Atom _ ->
+      [] 
+      
+    | Variable v -> 
+      // A variable term returns a list containing its own name.
+      [v] 
+      
+    | Predicate (_, body) -> 
+      List.collect freeVariables body
 
 
 let withFreshVariables (clause:Clause) : Clause =
@@ -140,8 +146,24 @@ let withFreshVariables (clause:Clause) : Clause =
   //
   // This may not be correct if the user-provided names of variables
   // had numbers in them in a certain format, but that's OK for now! 
-  failwith "not implemented"
 
+  let free_head_vars = freeVariables clause.Head
+  let free_body_vars = List.collect (fun term -> freeVariables term) clause.Body
+  let all_vars = List.distinct (free_head_vars @ free_body_vars)
+
+  let substitution_list = 
+    List.map (fun old_name -> 
+        // Create the new variable name (e.g., X -> X3)
+        let new_name = old_name + (string (nextNumber()))
+        // The substitution is (old_variable, new_variable_term)
+        (old_name, Variable(new_name))
+    ) all_vars
+  let fresh_subst = Map.ofList substitution_list
+
+  let new_head = substitute fresh_subst clause.Head
+  let new_body = substituteTerms fresh_subst clause.Body
+
+  {Head = new_head; Body = new_body}
 
 let query (program:list<Clause>) (query:Term) 
     : list<Clause * list<string * Term>> =
@@ -155,8 +177,24 @@ let query (program:list<Clause>) (query:Term)
   // clause and a substitution (list<string * Term>). Calling 'unify'
   // gives you 'option<list<string * Term>>', so you need to pattern match
   // on this and if it is 'Some(subst)' return 'Some(clause, subst)'.
-  failwith "not implemented"
 
+
+  let fresh_program = List.map withFreshVariables program
+
+  [| for fresh_clause in fresh_program do
+        // Attempt to unify the clause's Head with the Query.
+        // NOTE: We only care about the Head for initial matching.
+        let unification = unify fresh_clause.Head query
+
+        match unification with
+        | Some bindings -> 
+            yield (fresh_clause, bindings)
+
+        | None -> 
+            () // Empty expression does nothing
+
+    // Convert the resulting sequence array into a list.
+    |] |> Array.toList
 
 // ----------------------------------------------------------------------------
 // Querying the British royal family 
@@ -169,7 +207,7 @@ rule (Predicate("grandparent", [Variable("X"); Variable("Y")])) [
   Predicate("parent", [Variable("Z"); Variable("Y")]) ]
 |> withFreshVariables
 
-// Some information about the British royal family 
+// // Some information about the British royal family 
 let family = [ 
   fact (Predicate("male", [Atom("William")]))
   fact (Predicate("female", [Atom("Diana")]))
