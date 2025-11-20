@@ -42,21 +42,45 @@ let substituteTerms (subst:Map<string, Term>) (terms:list<Term>) =
   failwith "not implemented"
 
 
-let rec unifyLists l1 l2 = 
-  // TODO: Modify the implementation to use 'substituteTerms' and 'substituteSubst'.
-  //
-  // Let's say that your code calls 'unify h1 h2' to get a substitution 's1'
-  // and then it calls 'unifyLists t1 t2' to get a substitution 's2' and then
-  // it returns a concatentated list 's1 @ s2'. Modify the code so that:
-  //
-  // (1) The substitution 's1' is aplied to 't1' and 't2' before calling 'unifyLists'
-  // (2) The substitution 's2' is applied to all terms in substitution 's1' before returning
-  //
-  // You can look at your ML type inference code. The structure is very similar! 
-  failwith "implemented in step 1"
+let rec unifyLists l1 l2 : option<list<string * Term>> = 
+  match l1, l2 with 
+  | [], [] -> 
+      Some([])
 
-and unify t1 t2 = 
-  failwith "implemented in step 1"
+  | h1::t1, h2::t2 -> 
+      let unify_head = unify h1 h2
+      let unify_rest = unifyLists t1 t2
+
+      match unify_head with 
+      | Some head_bindings -> //head sucessfully unified
+        match unify_rest with 
+        | Some rest_bindings ->
+          Some(head_bindings @ rest_bindings) 
+
+        | None ->
+          // head succeeded but rest failed
+          None
+      | None ->
+        // head unification failed
+        None
+
+  | _ -> 
+    None
+
+and unify (t1: Term) (t2: Term) : option<list<string * Term>> =
+  match t1, t2 with 
+  | Atom a1, Atom a2 ->  
+    Some([])
+  
+  | Predicate(name1, truths1), Predicate(name2, truths2) when name1 = name2 ->
+    unifyLists truths1 truths2
+
+  | Variable name, a
+  | a, Variable name ->
+    Some([(name, a)])
+
+  //failed to unify
+  | _ -> None
 
 // ----------------------------------------------------------------------------
 // Advanced unification tests requiring correct substitution
