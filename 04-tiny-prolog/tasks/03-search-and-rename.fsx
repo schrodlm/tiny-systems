@@ -135,18 +135,6 @@ let rec freeVariables (term: Term) =
 
 
 let withFreshVariables (clause:Clause) : Clause =
-  // TODO: Get a list of distinct variables in the clause (using 
-  // 'freeVariables' and 'List.distinct'), generate a substitution 
-  // that append a number 'n' obtained by 'nextNumber()' to the end
-  // of all the variable names, and apply the substitutions to the 
-  // head and body of the clause.
-  //
-  // For example, 'grandparent(X,Y) :- parent(X,Z), parent(Z,Y)' may
-  // become 'grandparent(X3,Y3) :- parent(X3,Z3), parent(Z3,Y3)'
-  //
-  // This may not be correct if the user-provided names of variables
-  // had numbers in them in a certain format, but that's OK for now! 
-
   let free_head_vars = freeVariables clause.Head
   let free_body_vars = List.collect (fun term -> freeVariables term) clause.Body
   let all_vars = List.distinct (free_head_vars @ free_body_vars)
@@ -167,17 +155,6 @@ let withFreshVariables (clause:Clause) : Clause =
 
 let query (program:list<Clause>) (query:Term) 
     : list<Clause * list<string * Term>> =
-  // TODO: Return all clauses from 'program' whose 'Head' can be
-  // unified with the specified 'query' and return the resulting
-  // substitutions. Before unifying, rename variables in the program
-  // rule using 'withFreshVariables'. You can do this using 'List.choose' 
-  // or by using list comprehension.
-  // 
-  // The return type of this is a list of tuples consisting of the matching
-  // clause and a substitution (list<string * Term>). Calling 'unify'
-  // gives you 'option<list<string * Term>>', so you need to pattern match
-  // on this and if it is 'Some(subst)' return 'Some(clause, subst)'.
-
 
   let fresh_program = List.map withFreshVariables program
 
