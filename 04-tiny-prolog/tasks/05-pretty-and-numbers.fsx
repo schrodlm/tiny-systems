@@ -111,14 +111,21 @@ and unify (t1: Term) (t2: Term) : option<list<string * Term>> =
 // Pretty printing terms
 // ----------------------------------------------------------------------------
 
+// Atom("zero") for 0
+// Predicate("succ", [Atom("zero")]) for 1
+// Predicate("succ", [Predicate("succ", [Atom("zero")])]) for 2
 let rec (|Number|_|) term = 
   match term with 
+  | Atom("zero") -> 
+      Some(0)
+  | Predicate("succ", [t]) -> 
+      match (|Number|_|) t with
+      | Some(n) -> 
+          Some(n + 1) // Must return Some(integer)
+      | None -> 
+          None
   | _ -> 
-    // TODO: Write an active pattern to recognize numbers in the form used below.
-    // If the term is 'Atom("zero")' return Some(0). 
-    // If the term is 'Predicate("succ", [n])' where 'n' is itself
-    // a term representing number, return the number value +1. 
-    failwith "not implemented"
+      None
 
 
 let rec formatTerm term = 
@@ -130,7 +137,10 @@ let rec formatTerm term =
   | Predicate(p, items) ->
       // TODO: format all arguments recursively using 'formatTerm'
       // You can then concatenate the arguments using 'String.concat'
-      failwith "not implemented"
+      let formattedItems  = items |> List.map formatTerm
+      let concatenatedItems = String.concat "," formattedItems
+      sprintf "%s(%s)" p concatenatedItems
+
 
 // ----------------------------------------------------------------------------
 // Searching the program (database) and variable renaming
@@ -265,7 +275,9 @@ let rec num n =
   // TODO: Write a helper that generates a term representing number.
   // This should return Atom("zero") when n is 0 and otherwise
   // succ(succ(...(zero))) with appropriate number of 'succ's.
-  failwith "not implemented"
+  match n with
+  | 0 -> Atom("zero")
+  | n -> Predicate("succ", [num (n-1)])
 
 
 // Addition and equality testing for Peano arithmetic
