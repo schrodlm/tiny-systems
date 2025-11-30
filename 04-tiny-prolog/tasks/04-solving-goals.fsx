@@ -169,34 +169,62 @@ let query (program:list<Clause>) (query:Term)
     // Convert the resulting sequence array into a list.
     |] |> Array.toList
 
-let rec solve program subst goals = 
-  match goals with 
-  | g::goals -> 
-      // TODO: We need to solve the goal (term) 'g'. To do so, find all 
-      // matching clauses in the 'program' using 'query' and iterate over
-      // the returned list using 'for clause, newSubst in matches do'.
-      // For each possible solution, we need to add the 'clause.Body' to 
-      // the list of 'goals' and apply the substitution 'newSubst' to the
-      // new concatentated list of 'goals'. Then we need to apply the 
-      // substitution 'newSubst' to the substitution 'subst' we have so far,
-      // append the two and call 'solve' recursively with this new substitution
-      // to solve the new goals.
-      let matches = failwith "TODO"
-      for clause, newSubst in matches do
-        let newGoals = failwith "TODO"
-        solve program (failwith "TODO") (failwith "TODO")
+let rec solve (program : Clause list) subst (queries : Term list) = 
+  // Extract original variable names from the query
+  let rec extractVars term =
+      match term with
+      | Variable(v) -> [v]
+      | Predicate(_, args) -> List.collect extractVars args
+      | Atom(_) -> []
+  
+  let originalVars = queries |> List.collect extractVars |> Set.ofList
+  
+  let rec solveQuery program subst goals =
+    match goals with 
+    | g::goals -> 
+        // TODO: We need to solve the goal (term) 'g'. To do so, find all 
+        // matching clauses in the 'program' using 'query' and iterate over
+        // the returned list using 'for clause, newSubst in matches do'.
+        // For each possible solution, we need to add the 'clause.Body' to 
+        // the list of 'goals' and apply the substitution 'newSubst' to the
+        // new concatentated list of 'goals'. Then we need to apply the 
+        // substitution 'newSubst' to the substitution 'subst' we have so far,
+        // append the two and call 'solve' recursively with this new substitution
+        // to solve the new goals.
+    
+        let matches =  query program g
 
-  | [] -> 
-    // TODO: We solved all goals, which means 'subst' is a possible solution!
-    // Print 'subst' (either using printfn "%A" or in some nicer way).
-    failwith "not implemented" 
+        for clause, newSubst in matches do
+          // 1. Compose the new substitution (S' o S)
+          let substMap = Map.ofList newSubst
+          let appliedSubst = substituteSubst substMap subst
+          let composedSubst = newSubst @ appliedSubst // This is S'' = S' o S
 
+          // 2. The remaining goals for the next call: new goals appended to existing goals.
+          let nextGoalsUnsubstituted = goals @ clause.Body
+          
+          // 3. Apply the full composed substitution (S'') to the next goals (Goals'')
+          //    We need a Map for S''
+          let composedSubstMap = Map.ofList composedSubst
+          let nextGoals = substituteTerms composedSubstMap nextGoalsUnsubstituted
+        
+          solveQuery program composedSubst nextGoals // Recurse with S'' and Goals''
+
+    | [] -> 
+      // TODO: We solved all goals, which means 'subst' is a possible solution!
+      // Print 'subst' (either using printfn "%A" or in some nicer way).
+      let filteredSubst = 
+                subst |> List.filter (fun (var, _) -> Set.contains var originalVars)
+
+      printfn "Solution found: %A" filteredSubst
+
+  solveQuery program subst queries
 // ----------------------------------------------------------------------------
 // Querying the British royal family 
 // ----------------------------------------------------------------------------
 
 // Some information about the British royal family 
-let family = [ 
+let family: Clause list = [ 
   fact (Predicate("male", [Atom("William")]))
   fact (Predicate("female", [Atom("Diana")]))
   fact (Predicate("male", [Atom("Charles")]))
