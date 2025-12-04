@@ -45,9 +45,17 @@ let makeNativeMethod f =
 // Lookup and message sending
 // ----------------------------------------------------------------------------
 
-// NOTE: Implemented in step #1
 let rec lookup (msg:string) (obj:Objekt) : list<Slot> = 
-  failwith "implemented in step 1"
+  let slots = obj.Slots |> List.filter(fun(s) -> s.Name = msg )
+  match slots with 
+  | [] -> 
+    //return all parents
+     obj.Slots 
+      |> List.filter(fun x -> x.IsParent)
+      |> List.map(fun s -> s.Contents)
+      //recursively search for slots in parents
+      |> List.collect(fun parent -> lookup msg parent)
+  | _ -> slots
 
 
 // See also §3.3.7 (https://handbook.selflanguage.org/SelfHandbook2017.1.pdf)
@@ -160,7 +168,12 @@ larry |> send "book" |> send "print"
 let wonderland = makeObject [
   makeSlot "book" (makeString "Alice in Wonderland")
 ]
-let cheshire = failwith "implemented in step 1"
+let cheshire = makeObject [
+  makeParentSlot "parent*" cat
+  makeSlot "name" (makeString "Cheshire cat")
+  makeParentSlot "fictional*" wonderland
+]
+Vis.printObjectTree cheshire
 
 // All of these should be OK!
 cheshire |> send "name" |> send "print"
