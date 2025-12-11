@@ -79,7 +79,7 @@ let printCode : Objekt = failwith "implemented in step 2"
 // has the current instance as a parent, so you can access its slots
 // directly through the activation record (using 'getStringValue').
 // The second string is an argument named 'other', so you need to get 
-// that using 'lookup'
+// that using 'send'
 //
 // NOTE: This is now recursively defined so that you can create a new
 // string value inside 'appendCode' using 'makeString'.
