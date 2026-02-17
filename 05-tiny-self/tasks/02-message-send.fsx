@@ -47,9 +47,10 @@ let makeNativeMethod f =
 
 let rec lookup (msg:string) (obj:Objekt) : list<Slot> = 
   let slots = obj.Slots |> List.filter(fun(s) -> s.Name = msg )
+  printfn "Slots: %A" slots
   match slots with 
   | [] -> 
-    //return all parents
+    //try to search all parents
      obj.Slots 
       |> List.filter(fun x -> x.IsParent)
       |> List.map(fun s -> s.Contents)
@@ -77,13 +78,30 @@ let eval (slotValue:Objekt) (instance:Objekt) : Objekt =
   //
   // NOTE: Why do we set the receiver as parent of the activation record?
   // We can then send messages to it directly to access the receiver's slots!
-  failwith "TODO: not implemented"
+  match slotValue.Code with
+  | None -> slotValue
+  | Some code ->
+    match code.Special with
+    | Some (Native f) ->
+      // Clone the method object (slotValue) and inject the receiver parent
+      let activation =
+        { slotValue with Slots = makeParentSlot "receiver*" instance :: slotValue.Slots }
+      f activation
+    | _ -> failwith "Not a runnable code"
 
 
 let send (msg:string) (instance:Objekt) : Objekt =
   // TODO: Use 'lookup' to find slots with the name of the message 'msg'. If
   // there is exactly one, evaluate it using 'eval', otherwise report an error.
-  failwith "TODO: not implemented"
+  printfn "send %A" msg
+  let slots = lookup msg instance
+  match slots with
+  | [] -> failwith $"""No such message found in object {instance.ToString}"""
+  | [slot] -> 
+    printfn "eval"
+    
+    eval slot.Contents instance 
+  | _ -> failwith "Multiple slots found"
 
 
 // ----------------------------------------------------------------------------
@@ -93,11 +111,13 @@ let send (msg:string) (instance:Objekt) : Objekt =
 // TODO: Now we can reimplement 'getStringValue' using ordinary 'send'
 // that follows the standard Self semantics (rather than directly)
 let getStringValue (obj:Objekt) : string = 
-  failwith "TODO: not implemented"
-
+  let received = send "value" obj
+  match received.Special with
+  | Some (String s) -> s
+  | _ -> failwith "No string value found"
 
 // TODO: Define empty object with no data in it (needed below)
-let empty : Objekt = failwith "TODO: not implemented"
+let empty : Objekt = makeObject [] 
 
 let printCode = makeNativeMethod (fun arcd ->
   // TODO: Print the string value! To get the string, you can send 'value' 
@@ -107,7 +127,8 @@ let printCode = makeNativeMethod (fun arcd ->
   // 
   // As the first step, see what you actually pass to the method by
   // visualizing the activation record (arcd) using 'Vis.printObjectTree'!
-  failwith "TODO: not implemented"
+  let val = getStringValue arcd
+  empty
 )
 
 
@@ -119,7 +140,7 @@ let makeString s =
     makeSlot "value" (makeSpecialObject (String s)) 
     // TODO: Make 'stringPrototype' a parent of this string 
     // object so that we can send the 'print' message to it!
-    failwith "TODO: add a slot here"
+    makeParentSlot "proto*" stringPrototype    
   ]
 
 // ----------------------------------------------------------------------------
@@ -131,52 +152,52 @@ let makeString s =
 let hello = makeString "Hello world"
 hello |> send "print"
 
-// DEMO: Create and visualize object with multiple string-object slots
+// // DEMO: Create and visualize object with multiple string-object slots
 
-let multilang = makeObject [
-  makeSlot "english" (makeString "Hello world")
-  makeSlot "czech" (makeString "Ahoj svete")
-  makeSlot "german" (makeString "Hallo Welt")
-  makeSlot "french" (makeString "Bonjour monde")
-]
-Vis.printObjectTree multilang
+// let multilang = makeObject [
+//   makeSlot "english" (makeString "Hello world")
+//   makeSlot "czech" (makeString "Ahoj svete")
+//   makeSlot "german" (makeString "Hallo Welt")
+//   makeSlot "french" (makeString "Bonjour monde")
+// ]
+// Vis.printObjectTree multilang
 
-multilang |> send "english" |> send "print"
-multilang |> send "czech" |> send "print"
+// multilang |> send "english" |> send "print"
+// multilang |> send "czech" |> send "print"
 
 
-// ----------------------------------------------------------------------------
-// Tests - lookups in a hierarchy of cats!
-// ----------------------------------------------------------------------------
+// // ----------------------------------------------------------------------------
+// // Tests - lookups in a hierarchy of cats!
+// // ----------------------------------------------------------------------------
 
-// NOTE: Now we can do all of the below just by sending messages!
-// We send message to get a slot value and then send another 
-// message to invoke the printing method.
+// // NOTE: Now we can do all of the below just by sending messages!
+// // We send message to get a slot value and then send another 
+// // message to invoke the printing method.
 
-let cat = makeObject [
-  makeSlot "sound" (makeString "Meow")
-]
-let larry = makeObject [
-  makeParentSlot "parent*" cat
-  makeSlot "name" (makeString "Larry")
-]
-// Larry has name & sound, but no book!
-larry |> send "name" |> send "print"
-larry |> send "sound" |> send "print"
-larry |> send "book" |> send "print"
+// let cat = makeObject [
+//   makeSlot "sound" (makeString "Meow")
+// ]
+// let larry = makeObject [
+//   makeParentSlot "parent*" cat
+//   makeSlot "name" (makeString "Larry")
+// ]
+// // Larry has name & sound, but no book!
+// larry |> send "name" |> send "print"
+// larry |> send "sound" |> send "print"
+// // larry |> send "book" |> send "print"
 
-let wonderland = makeObject [
-  makeSlot "book" (makeString "Alice in Wonderland")
-]
-let cheshire = makeObject [
-  makeParentSlot "parent*" cat
-  makeSlot "name" (makeString "Cheshire cat")
-  makeParentSlot "fictional*" wonderland
-]
-Vis.printObjectTree cheshire
+// let wonderland = makeObject [
+//   makeSlot "book" (makeString "Alice in Wonderland")
+// ]
+// let cheshire = makeObject [
+//   makeParentSlot "parent*" cat
+//   makeSlot "name" (makeString "Cheshire cat")
+//   makeParentSlot "fictional*" wonderland
+// ]
+// Vis.printObjectTree cheshire
 
-// All of these should be OK!
-cheshire |> send "name" |> send "print"
-cheshire |> send "sound" |> send "print"
-cheshire |> send "book" |> send "print"
+// // All of these should be OK!
+// cheshire |> send "name" |> send "print"
+// cheshire |> send "sound" |> send "print"
+// cheshire |> send "book" |> send "print"
 
