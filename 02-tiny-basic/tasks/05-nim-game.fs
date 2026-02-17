@@ -36,9 +36,24 @@ type State =
 // Utilities
 // ----------------------------------------------------------------------------
 
-let printValue value = failwith "implemented in steps 1 and 3"
-let getLine state line = failwith "implemented in step 1"
-let addLine state (line, cmd) = failwith "implemented in step 2"
+let printValue value : Unit =
+  match value with
+  | StringValue str -> printf "%s" str
+  | NumberValue n -> printf "%d" n
+  | BoolValue b -> if b then printf "true" else printf "false"
+
+let getLine state line =
+  match state.Program |> List.tryFind (fun (next_line, _) -> next_line > line) with
+  | Some (next_line, cmd) -> (next_line, cmd)
+  | None -> (-1, Stop)
+
+let addLine state (line, cmd) =
+  let updatedProgram =
+    state.Program
+    |> List.filter (fun (existing_line, _) -> existing_line <> line)
+    |> fun program -> (line, cmd) :: program
+    |> List.sortBy fst
+  { state with Program = updatedProgram }
 
 // ----------------------------------------------------------------------------
 // Evaluator
@@ -49,10 +64,43 @@ let binaryRelOp f args =
   | [NumberValue a; NumberValue b] -> BoolValue(f a b)
   | _ -> failwith "expected two numerical arguments"
 
-let rec evalExpression expr = 
-  // TODO: We need an extra function 'MIN' that returns the smaller of
-  // the two given numbers (in F#, the function 'min' does exactly this.)
-  failwith "implemented in steps 1, 3 and 4"
+let rec evalExpression (expr: Expression, state: State) : Value =
+  match expr with
+  | Const c -> c
+  | Function (name, expr_list) ->
+    let evaluatedArgs = List.map (fun e -> evalExpression (e, state)) expr_list
+    match name with
+    | "+" ->
+        match evaluatedArgs with
+        | [NumberValue lhs; NumberValue rhs] -> NumberValue(lhs + rhs)
+        | _ -> failwith "Invalid arguments for +"
+    | "-" ->
+        match evaluatedArgs with
+        | [NumberValue lhs; NumberValue rhs] -> NumberValue(lhs - rhs)
+        | _ -> failwith "Invalid arguments for -"
+    | "=" ->
+        match evaluatedArgs with
+        | [NumberValue lhs; NumberValue rhs] -> BoolValue(lhs = rhs)
+        | _ -> failwith "Invalid arguments for ="
+    | "||" ->
+        match evaluatedArgs with
+        | [BoolValue lhs; BoolValue rhs] -> BoolValue(lhs || rhs)
+        | _ -> failwith "Invalid arguments for ||"
+    | "<" -> binaryRelOp (<) evaluatedArgs
+    | ">" -> binaryRelOp (>) evaluatedArgs
+    | "RND" ->
+        match evaluatedArgs with
+        | [NumberValue max] -> NumberValue(state.Random.Next(max))
+        | _ -> failwith "Invalid arguments for RND"
+    | "MIN" ->
+        match evaluatedArgs with
+        | [NumberValue a; NumberValue b] -> NumberValue(min a b)
+        | _ -> failwith "Invalid arguments for MIN"
+    | _ -> failwith $"Unsupported function {name}"
+  | Variable v ->
+    match state.Variables |> Map.tryFind v with
+    | Some value -> value
+    | None -> failwithf "Variable '%s' not found" v
 
 let rec runCommand state (line, cmd) =
   match cmd with 
@@ -60,24 +108,75 @@ let rec runCommand state (line, cmd) =
       let first = List.head state.Program    
       runCommand state first
 
-  | Print(expr) -> failwith "implemented in step 1"
-  | Goto(line) -> failwith "implemented in step 1"
-  | Assign _ | If _ -> failwith "implemented in step 3"
-  | Clear | Poke _ -> failwith "implemented in step 4"
+  | Print(exprs) ->
+      for expr in exprs do
+        let value = evalExpression(expr, state)
+        printValue value
+      runNextLine state line
 
-  // TODO: Input("X") should read a number from the console using Console.RadLine
-  // and parse it as a number using Int32.TryParse (retry if the input is wrong)
-  // Stop terminates the execution (you can just return the 'state'.)
-  | Input _ | Stop _ -> failwith "not implemented"
+  | Goto(targetLine) ->
+      let adjustedLine = targetLine - 1
+      let (new_line, new_cmd) = getLine state adjustedLine
+      runCommand state (new_line, new_cmd)
 
-and runNextLine state line = failwith "implemented in step 1"
+  | Assign(name, expr) ->
+      let evaluated = evalExpression(expr, state)
+      let updated = state.Variables.Add(name, evaluated)
+      runNextLine { state with Variables = updated } line
+
+  | If(expr, cmd) ->
+      let evaluated = evalExpression(expr, state)
+      match evaluated with
+      | BoolValue true -> runCommand state (-1, cmd)
+      | BoolValue false -> runNextLine state line
+      | _ -> failwith "Not valid expression in an if statement"
+
+  | Clear ->
+      System.Console.Clear()
+      runNextLine state line
+
+  | Poke(x_expr, y_expr, val_expr) ->
+      let x_val = evalExpression(x_expr, state)
+      let y_val = evalExpression(y_expr, state)
+      let value = evalExpression(val_expr, state)
+      match x_val, y_val, value with
+      | NumberValue x, NumberValue y, StringValue v ->
+          System.Console.SetCursorPosition(x, y)
+          System.Console.Write(v)
+          runNextLine state line
+      | _ -> failwith "Poke expects x:number, y:number, value:string arguments"
+
+  | Input(varName) ->
+      let rec readNumber () =
+        let input = System.Console.ReadLine()
+        match System.Int32.TryParse(input) with
+        | true, n -> n
+        | false, _ -> readNumber ()
+      let n = readNumber ()
+      let updated = state.Variables.Add(varName, NumberValue n)
+      runNextLine { state with Variables = updated } line
+
+  | Stop -> state
+
+and runNextLine state line =
+  let (next_line, next_cmd) = getLine state line
+  match next_line with
+  | -1 -> state
+  | _ -> runCommand state (next_line, next_cmd)
 
 // ----------------------------------------------------------------------------
 // Interactive program editing
 // ----------------------------------------------------------------------------
 
-let runInput state (line, cmd) = failwith "implemented in step 2"
-let runInputs state cmds = failwith "implemented in step 2"
+let runInput (state: State) (line: option<int>, cmd: Command) : State =
+  match line with
+  | None ->
+      runCommand state (-1, cmd)
+  | Some ln ->
+      addLine state (ln, cmd)
+
+let runInputs (state: State) (cmds: list<option<int> * Command>) : State =
+  List.fold (fun accState cmd -> runInput accState cmd) state cmds
 
 // ----------------------------------------------------------------------------
 // Test cases
